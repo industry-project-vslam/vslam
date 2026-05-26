@@ -1,6 +1,6 @@
 # VSLAM
 
-# Kickoff notes
+## Kickoff notes
 
 - Swarm sees and comunicates model of area to the operator
 - (Procedural moving?)
@@ -47,3 +47,7 @@
     - Markers?
     - Detect objects/allow to move around them by commands
 - Spaceial awareness
+
+## Documentation
+
+Check out our documentation [README.md](./docs/README.md)
