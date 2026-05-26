@@ -1,0 +1,3 @@
+cfclient
+pygame
+cflib
