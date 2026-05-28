@@ -551,6 +551,9 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+#pychache
+cache
+
 
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
@@ -828,6 +831,77 @@ pip-selfcheck.json
 
 # End of https://www.toptal.com/developers/gitignore/api/visualstudio,csharp,python,unity,venv
 
-# EXTRA
+### - EXTRA - ###
 
 *cache/
+### AI-deck / local capture outputs ###
+.venv/
+stream_out/
+img.jpeg
+*.img
+*.bin
+target.board.devices.flash.img
+__pycache__/
+
+# Keep Bitcraze source/vendor folders even though generic venv rules ignore Lib/.
+!testing/drone_connection/aideck-gap8-examples/lib/
+!testing/drone_connection/aideck-gap8-examples/lib/**
+#C
+# Created by https://www.toptal.com/developers/gitignore/api/c
+# Edit at https://www.toptal.com/developers/gitignore?templates=c
+
+### C ###
+# Prerequisites
+*.d
+
+# Object files
+*.o
+*.ko
+*.obj
+*.elf
+
+# Linker output
+*.ilk
+*.map
+*.exp
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Libraries
+*.lib
+*.a
+*.la
+*.lo
+
+# Shared objects (inc. Windows DLLs)
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Executables
+*.exe
+*.out
+*.app
+*.i*86
+*.x86_64
+*.hex
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# Kernel Module Compile Results
+*.mod*
+*.cmd
+.tmp_versions/
+modules.order
+Module.symvers
+Mkfile.old
+dkms.conf
+
+# End of https://www.toptal.com/developers/gitignore/api/c
