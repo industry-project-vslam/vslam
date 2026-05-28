@@ -1,77 +1,8 @@
 import time
-import cflib
 from cflib.crazyflie.swarm import SwarmPosition
 from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 from cflib.crazyflie.log import LogConfig
 from cflib.crazyflie.syncLogger import SyncLogger
-
-FLIGHT_HEIGHT = 0.75 # Height at which a drone will fly
-Z_MIN = 0.0 # The lowest height a drone can go (ground level)
-
-V_XY_DRONE = 0.20 # the speed of a drone (in meters/second)
-V_Z_DRONE = 0.5 # the speed of a drone (in meters/second)
-
-T_TAKEOFF = FLIGHT_HEIGHT / V_Z_DRONE # time it takes a drone to go from Z_MIN to FLIGHT_HEIGHT
-T_LANDING = FLIGHT_HEIGHT / V_Z_DRONE # time it takes a drone to go from FLIGHT_HEIGHT to Z_MIN
-
-class MultiDroneCommand:
-    @staticmethod
-    def get_uris():
-        cflib.crtp.init_drivers()
-        available = cflib.crtp.scan_interfaces()
-
-    @staticmethod
-    def activate_led_bit_mask(swarm: list[SyncCrazyflie]):
-        for scf in swarm:
-            DroneCommand.activate_led_bit_mask(scf)
-
-    @staticmethod
-    def deactivate_led_bit_mask(swarm: list[SyncCrazyflie]):
-        for scf in swarm:
-            DroneCommand.deactivate_led_bit_mask(scf)
-
-    @staticmethod
-    def light_check(swarm: list[SyncCrazyflie]):
-        MultiDroneCommand.activate_led_bit_mask(swarm)
-        time.sleep(2)
-        MultiDroneCommand.deactivate_led_bit_mask(swarm)
-
-    @staticmethod
-    def get_positions(swarm: list[SyncCrazyflie]):
-        return {scf._link_uri: DroneCommand.get_position(scf) for scf in swarm}
-
-    @staticmethod
-    def take_off(swarm: list[SyncCrazyflie]):
-        for scf in swarm:
-            DroneCommand.take_off(scf)
-        time.sleep(T_TAKEOFF)
-
-    @staticmethod
-    def land(swarm: list[SyncCrazyflie]):
-        for scf in swarm:
-            DroneCommand.land(scf)
-        time.sleep(T_LANDING)
-        MultiDroneCommand.stop_rotors(swarm)
-
-    @staticmethod
-    def stop_rotors(swarm: list[SyncCrazyflie]):
-        for scf in swarm:
-            DroneCommand.stop_rotors(scf)
-
-    @staticmethod
-    def run_step(swarm: list[SyncCrazyflie], args_dict, max_swarm_delta):
-        for scf in swarm:
-            drone_move = args_dict[scf._link_uri][0]
-            DroneCommand.run_step(scf, drone_move)
-        wait_time = max_swarm_delta / V_XY_DRONE
-        time.sleep(wait_time)
-
-    @staticmethod
-    def reset_estimators(swarm: list[SyncCrazyflie]):
-        print('Waiting for estimators to find positions...', end='\r')
-        for scf in swarm:
-            DroneCommand.reset_estimator(scf)
-        print('Waiting for estimators to find positions...success!')
 
 class DroneCommand:
     @staticmethod
@@ -81,6 +12,12 @@ class DroneCommand:
     @staticmethod
     def deactivate_led_bit_mask(scf: SyncCrazyflie):
         scf.cf.param.set_value('led.bitmask', 0)
+
+    @staticmethod
+    def light_check(scf: SyncCrazyflie):
+        DroneCommand.activate_led_bit_mask(scf)
+        time.sleep(1.00)
+        DroneCommand.deactivate_led_bit_mask(scf)
 
     @staticmethod
     def get_position(scf: SyncCrazyflie):
@@ -97,14 +34,18 @@ class DroneCommand:
                 return SwarmPosition(x, y, z)
 
     @staticmethod
-    def take_off(scf: SyncCrazyflie):
+    def take_off(scf: SyncCrazyflie, take_off: tuple[float, float]):
+        z, t_take_off = take_off
         commander = scf.cf.high_level_commander
-        commander.takeoff(FLIGHT_HEIGHT, T_TAKEOFF)
+        commander.takeoff(z, t_take_off)
+        time.sleep(t_take_off)
 
     @staticmethod
-    def land(scf: SyncCrazyflie):
+    def land(scf: SyncCrazyflie, landing: tuple[float, float]):
+        z, t_landing = landing
         commander = scf.cf.high_level_commander
-        commander.land(Z_MIN, T_LANDING)
+        commander.land(z, t_landing)
+        time.sleep(t_landing)
 
     @staticmethod
     def stop_rotors(scf: SyncCrazyflie):
@@ -112,12 +53,11 @@ class DroneCommand:
         commander.stop()
 
     @staticmethod
-    def run_step(scf: SyncCrazyflie, move: tuple[tuple[float, float], float]):
-        (x_pn, y_pn), delta_p = move
-        duration = delta_p / V_XY_DRONE
-
+    def run_step(scf: SyncCrazyflie, move: tuple[float, float, float, float, float]):
+        x, y, z, yaw, duration = move
         commander = scf.cf.high_level_commander
-        commander.go_to(x_pn,y_pn,FLIGHT_HEIGHT,0,duration)
+        commander.go_to(x, y, z, yaw, duration)
+        time.sleep(duration)
 
     @staticmethod
     def wait_for_position_estimator(scf: SyncCrazyflie):
@@ -154,6 +94,14 @@ class DroneCommand:
                             max_y - min_y) < threshold and (
                             max_z - min_z) < threshold:
                         break
+
+    @staticmethod
+    def set_position(scf: SyncCrazyflie, position):
+        x, y, z, yaw_radians = position
+        scf.cf.param.set_value('kalman.initialX', x)
+        scf.cf.param.set_value('kalman.initialY', y)
+        scf.cf.param.set_value('kalman.initialZ', z)
+        scf.cf.param.set_value('kalman.initialYaw', yaw_radians)
 
     @staticmethod
     def reset_estimator(scf: SyncCrazyflie):
