@@ -14,7 +14,11 @@ During the kickoff presentation all team members contributed to getting a cleare
 
 The quick start did have some drawbacks. Because everyone was very focussed on their individual work, integration and agile principles were neglected. There was no improvement of the project board, backlog and it wasn't updated when working on tasks. This resulted in repetition of tasks. Not all tests and research was added to the github code base. Early good results also prevented looking further into more existing implementations. Systems all work seperate but no systems had been combined yet.
 
-### notes
+### Takeaways
+
+We need more focus on integration, pushing more code to the github repository. We also need a more streamlined way to work together on crazyflie firmware. keep better track of the project board to avoid repetition of work. Do more research and testing.
+
+### Notes
 
 ```text
 literature research
@@ -46,10 +50,40 @@ Roel
 - More scrum principles were forgotten about, implementing backlog and doing retrospectives
 ```
 
-### Week 02
+## Week 02
 
-### Week 03
 
-### Week 04
 
-### Week 05
+### Notes
+
+```text
+Noah
++ finished P2P collsion avoidance
+- wasted a lot of time figuring outground texture causes confusion in the flow deck
+
+Nikita
++ Combining code and forking the crazyflie firmware for our purposes
+- time lost reflashing, rebooting drones, debugging
+
+Tofa
++ mapping conversion to api
+- mapping localization, mapping takes a lot of time
+
+Anton
++ better image streaming with personal network (router), environment testing
+- problems with figuring out collision avoidance repos, reprogramming of the drones
+
+Nazar
++ getting material and location access
+- project board needs improvement, less issues (mainly duplicates, abandoned)
+
+Roel
++ Greater focuss on integration
+- loss of focus during work hours, people not being present average 7 hours per day
+```
+
+## Week 03
+
+## Week 04
+
+## Week 05
