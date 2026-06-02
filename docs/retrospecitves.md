@@ -52,13 +52,23 @@ Roel
 
 ## Week 02
 
+### Positives
 
+Fields of research were continued with improvement (P2P, video streaming, object detection, mapping). There was ood communication with third parties to get access to necesarry material and a testing environment. Integration improved making use of forks to write our own firmware.
+
+### Negatives
+
+The big bottleneck in week 2 were edge cases with software (flow deck, camera collision avoidance repos) and slow processes like mapping. These edge cases caused a lot of delay. Our project board has become a bit stale. There are a lot of duplicate or abandoned issues. Our drive for the project has also slightly decreased causing some team members to lose focus during work and others to not work the required 7 hours per day average.
+
+### Takeaways
+
+We need a new sense of direction as a group to allign our goals better, improve communication and commit more to made agreements. Refreshing our project board with input from all team members
 
 ### Notes
 
 ```text
 Noah
-+ finished P2P collsion avoidance
++ improved P2P collsion avoidance
 - wasted a lot of time figuring outground texture causes confusion in the flow deck
 
 Nikita
