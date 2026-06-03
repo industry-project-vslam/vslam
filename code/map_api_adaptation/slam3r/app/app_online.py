@@ -1,0 +1,665 @@
+import argparse
+import gradio
+import os
+import torch
+import numpy as np
+import tempfile
+import functools
+import threading
+from queue import Queue,Empty
+import viser
+
+from slam3r.models import Local2WorldModel, Image2PointsModel
+from slam3r.utils.device import to_numpy
+from slam3r.utils.recon_utils import *
+from slam3r.datasets.get_webvideo import *
+from slam3r.pipeline.recon_online_pipeline import *
+
+point_cloud_queue = Queue()
+viser_server_url = None
+
+# Cancellation state
+_cancel_flag = False
+_cancel_lock = threading.Lock()
+
+def set_cancel_flag(value: bool):
+    """Thread-safe setter for cancellation flag."""
+    global _cancel_flag
+    with _cancel_lock:
+        _cancel_flag = value
+
+def should_cancel() -> bool:
+    """Thread-safe getter for cancellation flag."""
+    global _cancel_flag
+    with _cancel_lock:
+        return _cancel_flag
+
+def recon_scene(i2p_model:Image2PointsModel, 
+                l2w_model:Local2WorldModel, 
+                device, save_dir, fps, 
+                files_type, video_url, img_dir_or_list, 
+                keyframe_stride, win_r, initial_winsize, conf_thres_i2p,
+                num_scene_frame, update_buffer_intv, buffer_strategy, buffer_size,
+                conf_thres_l2w, num_points_save, retrieve_freq):
+    # print(f"device: {device},\n save_dir: {save_dir},\n fps: {fps},\n keyframe_stride: {keyframe_stride},\n win_r: {win_r},\n initial_winsize: {initial_winsize},\n conf_thres_i2p: {conf_thres_i2p},\n num_scene_frame: {num_scene_frame},\n update_buffer_intv: {update_buffer_intv},\n buffer_strategy: {buffer_strategy},\n buffer_size: {buffer_size},\n conf_thres_l2w: {conf_thres_l2w},\n num_points_save: {num_points_save}")
+    np.random.seed(42)
+    
+    max_buffer_size = buffer_size
+    strategy = buffer_strategy
+    # num_views = 0
+    adj_distance = keyframe_stride
+    source = ""
+    if files_type == "webcamera":
+        source = video_url.value
+    else:
+        source = img_dir_or_list
+    dataset = FrameReader(source)
+    data_views = [] # store the processed views for reconstruction
+    input_views = [] # store the views with img tokens and predicted point clouds, which serve as input to i2p and l2w models
+    rgb_imgs = []
+    local_confs_mean_up2now = []
+    fail_view = {}
+    last_ref_ids_buffer = []
+    assert initial_winsize >= 2, "not enough views for initializing the scene reconstruction"
+    per_frame_res = dict(i2p_pcds=[], i2p_confs=[], l2w_pcds=[], l2w_confs=[], rgb_imgs=[])
+    registered_confs_mean = []
+    num_frame_pass = 0
+    num_frame_read = 0
+
+    point_cloud_queue.put(None)
+
+    while True:
+        # Check for cancellation request
+        if should_cancel():
+            print("Cancellation requested. Stopping reconstruction...")
+            set_cancel_flag(False)  # Reset flag
+            break
+            
+        success, frame = dataset.read()
+        if not success:
+            break
+        num_frame_pass += 1   
+        if (num_frame_pass - 1) % fps == 0: 
+            num_frame_read += 1   
+            current_frame_id = num_frame_read - 1
+            frame, data_views, rgb_imgs = get_raw_input_frame(
+                                    dataset.type, data_views, 
+                                    rgb_imgs,current_frame_id, 
+                                    frame, device)
+            
+            input_view, per_frame_res, registered_confs_mean = process_input_frame(
+                                    per_frame_res, registered_confs_mean, 
+                                    data_views, current_frame_id, i2p_model)
+            input_views.append(input_view)
+            
+            # accumulate the initial window frames
+            if current_frame_id < (initial_winsize - 1)*keyframe_stride:
+                continue
+            elif current_frame_id == (initial_winsize - 1)*keyframe_stride:
+                InitialSceneOutput = initial_scene_for_accumulated_frames(
+                                        input_views, initial_winsize, keyframe_stride,
+                                        i2p_model, per_frame_res, registered_confs_mean,
+                                        buffer_size, conf_thres_i2p)
+                buffering_set_ids = InitialSceneOutput[0]
+                init_ref_id = InitialSceneOutput[1]
+                init_num = InitialSceneOutput[2]
+                input_views = InitialSceneOutput[3]
+                per_frame_res = InitialSceneOutput[4]
+                registered_confs_mean = InitialSceneOutput[5]
+                
+                local_confs_mean_up2now, per_frame_res, input_views =\
+                            recover_points_in_initial_window(
+                                                current_frame_id, buffering_set_ids, keyframe_stride,
+                                                init_ref_id, per_frame_res,
+                                                input_views, i2p_model, conf_thres_i2p)
+                        
+                # Special treatment: register the frames within the range of initial window with L2W model
+                if keyframe_stride > 1:
+                    max_conf_mean, input_views, per_frame_res = \
+                        register_initial_window_frames(init_num, keyframe_stride, buffering_set_ids,
+                                                        input_views, l2w_model, per_frame_res, 
+                                                        registered_confs_mean, device)
+                    # A problem is that the registered_confs_mean of the initial window is generated by I2P model,
+                    # while the registered_confs_mean of the frames within the initial window is generated by L2W model,
+                    # so there exists a gap. Here we try to align it.
+                    max_initial_conf_mean = -1
+                    for ii in range(init_num):
+                        if registered_confs_mean[ii*keyframe_stride] > max_initial_conf_mean:
+                            max_initial_conf_mean = registered_confs_mean[ii*keyframe_stride]
+                    factor = max_conf_mean / max_initial_conf_mean
+                    # print(f'align register confidence with a factor {factor}')
+                    for ii in range(init_num):
+                        per_frame_res['l2w_confs'][ii*keyframe_stride] *= factor
+                        registered_confs_mean[ii*keyframe_stride] = \
+                            per_frame_res['l2w_confs'][ii*keyframe_stride].mean().cpu()
+                        
+                # prepare for the next online reconstruction
+                milestone = init_num * keyframe_stride + 1
+                candi_frame_id = len(buffering_set_ids) # used for the reservoir sampling strategy
+                for i in range(current_frame_id + 1):
+                    point_cloud_queue.put((per_frame_res["l2w_pcds"][i][0], \
+                        rgb_imgs[i], per_frame_res['l2w_confs'][i]))   
+                continue
+
+            ref_ids, ref_ids_buffer = select_ids_as_reference(buffering_set_ids, current_frame_id,
+                                                    input_views, i2p_model, num_scene_frame, win_r,
+                                                    adj_distance, retrieve_freq, last_ref_ids_buffer)
+            
+            last_ref_ids_buffer = ref_ids_buffer
+            local_views = [input_views[current_frame_id]] + [input_views[id] for id in ref_ids]
+
+            local_confs_mean_up2now, per_frame_res, input_views = \
+                pointmap_local_recon(local_views, i2p_model, current_frame_id, 0, per_frame_res,
+                                           input_views, conf_thres_i2p, local_confs_mean_up2now)
+                
+            ref_views = [input_views[id] for id in ref_ids]
+            input_views, per_frame_res, registered_confs_mean = pointmap_global_register(
+                                ref_views, input_views, l2w_model, 
+                                per_frame_res, registered_confs_mean, current_frame_id,
+                                device=device)
+
+            next_frame_id = current_frame_id + 1
+            if next_frame_id - milestone >= update_buffer_intv:
+                milestone, candi_frame_id, buffering_set_ids = update_buffer_set(
+                                        next_frame_id, max_buffer_size, 
+                                        keyframe_stride, buffering_set_ids, strategy, 
+                                        registered_confs_mean, local_confs_mean_up2now, 
+                                        candi_frame_id, milestone)
+            
+            conf = registered_confs_mean[current_frame_id]
+            if conf < 10:
+                fail_view[current_frame_id] = conf.item()
+            print(f"finish recover pcd of frame {current_frame_id}, with a mean confidence of {conf:.2f}.")
+            point_cloud_queue.put((per_frame_res["l2w_pcds"][current_frame_id][0], 
+                                   rgb_imgs[current_frame_id], 
+                                   per_frame_res['l2w_confs'][current_frame_id]))
+
+    print(f"finish reconstructing {num_frame_read} frames")
+    print(f'mean confidence for whole scene reconstruction: \
+          {torch.tensor(registered_confs_mean).mean().item():.2f}')
+    
+    print(f"{len(fail_view)} views with low confidence: ", 
+          {key:round(fail_view[key],2) for key in fail_view.keys()})
+     
+    per_frame_res['rgb_imgs'] = rgb_imgs
+    save_path = get_model_from_scene(per_frame_res=per_frame_res, 
+                                     save_dir=save_dir, 
+                                     num_points_save=num_points_save, 
+                                     conf_thres_res=conf_thres_l2w)
+    return save_path, per_frame_res
+
+def server_viser(args):
+    
+    if args.server_name is not None:
+        server_name = args.server_name
+    else:
+        server_name = '0.0.0.0' if args.local_network else '127.0.0.1'
+    
+    server = viser.ViserServer(host=server_name, port=args.viser_server_port, verbose=False)
+    global viser_server_url
+    server.gui.reset()
+    viser_server_url = f"http://{server.get_host()}:{server.get_port()}"
+    
+    points_buffer = np.zeros((0, 3), dtype=np.float32)
+    colors_buffer = np.zeros((0, 3), dtype=np.uint8)
+
+    point_cloud_handle = server.scene.add_point_cloud(
+        name="/reconstruction_cloud",
+        points=points_buffer,
+        colors=colors_buffer,
+        point_size=0.001,
+    )
+
+    conf_thres_res = 12
+    num_points_per_frame = 20000
+    max_num_points_all = 3000000
+    
+    while True:
+        try:
+            new_data = point_cloud_queue.get(block=True, timeout=0.1)
+            
+            if new_data is None:
+                print("Viser: start a new round of visualization with empty point cloud.")
+                points_buffer = np.zeros((0, 3), dtype=np.float32)
+                colors_buffer = np.zeros((0, 3), dtype=np.uint8)
+                point_cloud_handle.points = points_buffer
+                point_cloud_handle.colors = colors_buffer
+                history_points_total = 0
+                reserve_ratio = 1
+                continue
+
+            new_frame_points_data, new_frame_colors_data, new_frame_confs_data = new_data
+            if isinstance(new_frame_points_data, torch.Tensor):
+                new_frame_points = new_frame_points_data.cpu().numpy()
+            else:
+                new_frame_points = new_frame_points_data
+            # new_frame_points[..., 0] *= -1 # flip the axis for better visualization    
+            # new_frame_points[..., 2] *= -1 # flip the axis for better visualization    
+            new_frame_points1 = new_frame_points.copy()
+            new_frame_points1[..., 0] *= -1
+            new_frame_points1[..., 1] = -new_frame_points[..., 2]
+            new_frame_points1[..., 2] = -new_frame_points[..., 1]
+            new_frame_points = new_frame_points1
+            
+            if isinstance(new_frame_colors_data, torch.Tensor):
+                new_frame_colors = new_frame_colors_data.cpu().numpy().astype(np.uint8)
+            else:
+                new_frame_colors = new_frame_colors_data.astype(np.uint8)
+            if isinstance(new_frame_confs_data, torch.Tensor):
+                new_frame_confs = new_frame_confs_data.cpu().numpy()
+            else:
+                new_frame_confs = new_frame_confs_data
+
+            flattened_points = new_frame_points.reshape(-1, 3)
+            flattened_colors = new_frame_colors.reshape(-1, 3)
+            flattened_confs = new_frame_confs.reshape(-1)
+            
+            conf_mask = flattened_confs > conf_thres_res
+            filtered_points = flattened_points[conf_mask]
+            filtered_colors = flattened_colors[conf_mask]
+            
+            n_points_in_frame = len(filtered_points)
+            n_samples = min(num_points_per_frame, n_points_in_frame)
+            
+            if n_samples > 0:
+                if n_points_in_frame > n_samples:
+                    sampled_idx = np.random.choice(n_points_in_frame, n_samples, replace=False)
+                    sampled_pts = filtered_points[sampled_idx]
+                    sampled_colors = filtered_colors[sampled_idx]
+                else:
+                    sampled_pts = filtered_points
+                    sampled_colors = filtered_colors
+
+                history_points_total += n_samples
+                now_total_num = len(points_buffer) + n_samples
+                
+                if now_total_num > max_num_points_all * 1.2: # avoid frequent sampling
+                    target_ratio = max_num_points_all / history_points_total
+                    sample_buffer_ratio = target_ratio / reserve_ratio
+                    choice = np.random.choice(len(points_buffer), int(len(points_buffer)*sample_buffer_ratio), replace=False)
+                    points_buffer = points_buffer[choice]
+                    colors_buffer = colors_buffer[choice]
+                    choice = np.random.choice(n_samples, int(n_samples*target_ratio), replace=False)
+                    sampled_pts = sampled_pts[choice]
+                    sampled_colors = sampled_colors[choice]
+                
+                points_buffer = np.concatenate((points_buffer, sampled_pts), axis=0)
+                colors_buffer = np.concatenate((colors_buffer, sampled_colors), axis=0)
+                                
+                point_cloud_handle.points = points_buffer
+                point_cloud_handle.colors = colors_buffer
+
+                reserve_ratio = len(points_buffer)/history_points_total
+            
+                print(f"Viser: point cloud updated with {n_samples} new points,\
+                    total {len(points_buffer)} points now.")
+            else:
+                print("Viser: no points passed the confidence threshold in this frame.")
+                
+        except Empty:
+            pass
+        except Exception as e:
+            print(f"Viser: encountered an error: {e}")
+            break
+            
+    print("Viser: exiting visualization thread.")
+    
+def get_model_from_scene(per_frame_res, save_dir, 
+                         num_points_save=200000, 
+                         conf_thres_res=3, 
+                         valid_masks=None
+                        ):  
+        
+    # collect the registered point clouds and rgb colors
+    pcds = []
+    rgbs = []
+    pred_frame_num = len(per_frame_res['l2w_pcds'])
+    registered_confs = per_frame_res['l2w_confs']   
+    registered_pcds = per_frame_res['l2w_pcds']
+    rgb_imgs = per_frame_res['rgb_imgs']
+    for i in range(pred_frame_num):
+        registered_pcd = to_numpy(registered_pcds[i])
+        if registered_pcd.shape[0] == 3:
+            registered_pcd = registered_pcd.transpose(1,2,0)
+        registered_pcd = registered_pcd.reshape(-1,3)
+        rgb = rgb_imgs[i].reshape(-1,3)
+        pcds.append(registered_pcd)
+        rgbs.append(rgb)
+        
+    res_pcds = np.concatenate(pcds, axis=0)
+    res_rgbs = np.concatenate(rgbs, axis=0)
+    
+    pts_count = len(res_pcds)
+    valid_ids = np.arange(pts_count)
+    
+    # filter out points with gt valid masks
+    if valid_masks is not None:
+        valid_masks = np.stack(valid_masks, axis=0).reshape(-1)
+        # print('filter out ratio of points by gt valid masks:', 1.-valid_masks.astype(float).mean())
+    else:
+        valid_masks = np.ones(pts_count, dtype=bool)
+    
+    # filter out points with low confidence
+    if registered_confs is not None:
+        conf_masks = []
+        for i in range(len(registered_confs)):
+            conf = registered_confs[i]
+            conf_mask = (conf > conf_thres_res).reshape(-1).cpu() 
+            conf_masks.append(conf_mask)
+        conf_masks = np.array(torch.cat(conf_masks))
+        valid_ids = valid_ids[conf_masks&valid_masks]
+        print('ratio of points filered out: {:.2f}%'.format((1.-len(valid_ids)/pts_count)*100))
+    
+    # sample from the resulting pcd consisting of all frames
+    n_samples = min(num_points_save, len(valid_ids))
+    print(f"resampling {n_samples} points from {len(valid_ids)} points")
+    sampled_idx = np.random.choice(valid_ids, n_samples, replace=False)
+    sampled_pts = res_pcds[sampled_idx]
+    sampled_rgbs = res_rgbs[sampled_idx]
+    
+    # Apply coordinate transformation in-place (flip Y and Z for visualization)
+    sampled_pts[..., 1:] *= -1
+    
+    # Save directly as PLY with transformation applied
+    save_name = f"recon.ply"
+    save_path = join(save_dir, save_name)
+    save_ply(points=sampled_pts, save_path=save_path, colors=sampled_rgbs)
+
+    return save_path
+
+def display_inputs(images):
+    img_label = "Click or use the left/right arrow keys to browse images", 
+       
+
+    if images is None or len(images) == 0: 
+        return [gradio.update(label=img_label, value=None, visible=False, 
+                              selected_index=0, scale=2, preview=True, height=300,),
+                gradio.update(value=None, visible=False, scale=2, height=300,)]  
+
+    if isinstance(images, str): 
+        file_path = images
+        video_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.webm'}
+        if any(file_path.endswith(ext) for ext in video_extensions):
+            return [gradio.update(label=img_label, value=None, visible=False,
+                                  selected_index=0, scale=2, preview=True, height=300,),
+                gradio.update(value=file_path, autoplay=True, visible=True, scale=2, height=300,)]
+        else:
+            return [gradio.update(label=img_label, value=None, visible=False, 
+                                  selected_index=0, scale=2, preview=True, height=300,),
+                    gradio.update(value=None, visible=False, scale=2, height=300,)] 
+    
+            
+    return [gradio.update(label=img_label, value=images, visible=True, 
+                          selected_index=0, scale=2, preview=True, height=300,),
+            gradio.update(value=None, visible=False, scale=2, height=300,)]
+
+def change_inputfile_type(input_type):
+    update_file = gradio.update(visible=False)
+    update_webcam = gradio.update(visible=False)
+    update_external_webcam_html = gradio.update(visible=False)
+    update_video_fps = gradio.update(visible=False, value=1, scale=0) 
+    update_url = gradio.update(visible=False)
+    image_gallery = gradio.update(visible=True)
+    video_gallery = gradio.update(visible=True)
+
+    if input_type == "directory":
+        update_file = gradio.update(file_count="directory", file_types=["image"],
+                                 label="Select a directory containing images", visible=True, value=None) 
+        video_gallery = gradio.update(visible=False)
+    elif input_type == "images":
+        update_file = gradio.update(file_count="multiple", file_types=["image"],
+                                 label="Upload multiple images", visible=True, value=None)
+        video_gallery = gradio.update(visible=False)
+    elif input_type == "video":
+        update_file = gradio.update(file_count="single", file_types=["video"],
+                                 label="Upload a mp4 video", visible=True, value=None)
+        update_video_fps = gradio.update(interactive=True, scale=1, visible=True, value=5) 
+        image_gallery = gradio.update(visible=False)
+    elif input_type == "webcamera":
+        update_external_webcam_html = gradio.update(visible=True)
+        update_url = gradio.update(visible=True)
+        update_video_fps = gradio.update(interactive=True, scale = 1, visible=True, value = 5)
+        image_gallery = gradio.update(visible=False)
+        video_gallery = gradio.update(visible=False)
+
+    return update_file, update_webcam, update_external_webcam_html,\
+            update_video_fps, update_url,update_url,update_url,update_url,\
+                image_gallery, video_gallery
+    
+def change_kf_stride_type(kf_stride):
+    max_kf_stride = 10
+    if kf_stride == "auto":
+        kf_stride_fix = gradio.Slider(value=-1,minimum=-1, maximum=0, step=1, 
+                                      visible=False, interactive=True, 
+                                      label="stride between keyframes",
+                                      info="For I2P reconstruction!")
+    elif kf_stride == "manual setting":
+        kf_stride_fix = gradio.Slider(value=1,minimum=1, maximum=max_kf_stride, step=1, 
+                                      visible=True, interactive=True, 
+                                      label="stride between keyframes",
+                                      info="For I2P reconstruction!")
+    return kf_stride_fix
+
+def change_buffer_strategy(buffer_strategy):
+    if buffer_strategy == "reservoir" or buffer_strategy == "fifo":
+        buffer_size = gradio.Number(value=100, precision=0, minimum=1,
+                                    interactive=True, 
+                                    visible=True,
+                                    label="size of the buffering set",
+                                    info="For L2W reconstruction!")
+    elif buffer_strategy == "unbounded":
+        buffer_size = gradio.Number(value=10000, precision=0, minimum=1,
+                                    interactive=True, 
+                                    visible=False,
+                                    label="size of the buffering set",
+                                    info="For L2W reconstruction!")
+    return buffer_size
+
+def main_demo(i2p_model, l2w_model, device, tmpdirname, server_name, server_port):
+    recon_scene_func = functools.partial(recon_scene, i2p_model, l2w_model, device)
+    
+    with gradio.Blocks(css=""".gradio-container {margin: 0 !important; min-width: 100%};""", title="SLAM3R Demo",) as demo:
+        # scene state is save so that you can change num_points_save... without rerunning the inference
+        per_frame_res = gradio.State(None)
+        tmpdir_name = gradio.State(tmpdirname)
+        auth_url = gradio.State("")
+        
+        gradio.HTML('<h2 style="text-align: center;">SLAM3R Demo</h2>')
+        with gradio.Column():
+            with gradio.Row():
+                with gradio.Column():
+                    input_type = gradio.Dropdown([ "directory", "images", "video"],
+                                                scale=1,
+                                                value='directory', label="select type of input files")
+                    frame_extract_interval = gradio.Number(value=1,
+                                                    scale=0,
+                                                    interactive=True,
+                                                    visible=False,
+                                                    label="Interval for extracting frames from video/webcamera",)
+                    input_url_web_cam = gradio.Textbox(label="your ip camera's url",
+                                                   visible=False,
+                                                   interactive=True
+                                                   )
+                    with gradio.Row():
+                        web_cam_account = gradio.Textbox(label="your account",
+                                                         visible= False, interactive=True)
+                        web_cam_password = gradio.Textbox(label="your password",
+                                                          visible= False, interactive=True)
+                    confirm_button = gradio.Button("apply", visible= False, interactive=True)
+                    
+                inputfiles = gradio.File(file_count="directory", file_types=["image"],
+                                         scale=2,
+                                         height=200,
+                                         label="Select a directory containing images")
+                inputfiles_webcam = gradio.Image(sources="webcam", type="filepath",
+                                                  scale=2,
+                                                  height=200,
+                                                  label="Webcam Input",
+                                                  visible=False) 
+                
+                inputfiles_external_webcam_html = gradio.HTML(""
+                )
+              
+                image_gallery = gradio.Gallery(label="Click or use the left/right arrow keys to browse images",
+                                            visible=False,
+                                            selected_index=0,
+                                            preview=True,   
+                                            height=300,
+                                            scale=2)
+                video_gallery = gradio.Video(label="Uploaded Video",
+                                            visible=False,
+                                            height=300,
+                                            scale=2)
+                
+            with gradio.Row():
+                kf_stride = gradio.Dropdown(["manual setting"], label="how to choose stride between keyframes",
+                                           value="manual setting", interactive=True,  
+                                           info="For I2P reconstruction!")
+                kf_stride_fix = gradio.Slider(value=1, minimum=0, maximum=100, step=1, 
+                                              visible=True, interactive=True, 
+                                              label="stride between keyframes",
+                                              info="For I2P reconstruction!")
+                win_r = gradio.Number(value=5, precision=0, minimum=1, maximum=200,
+                                      interactive=True, 
+                                      label="the radius of the input window",
+                                      info="For I2P reconstruction!")
+                initial_winsize = gradio.Number(value=2, precision=0, minimum=2, maximum=200,
+                                      interactive=True, 
+                                      label="the number of frames for initialization",
+                                      info="For I2P reconstruction!")
+                conf_thres_i2p = gradio.Slider(value=1.5, minimum=1., maximum=10,
+                                      interactive=True, 
+                                      label="confidence threshold for the i2p model",
+                                      info="For I2P reconstruction!")
+            
+            with gradio.Row():
+                num_scene_frame = gradio.Slider(value=10, minimum=1., maximum=100, step=1,
+                                      interactive=True, 
+                                      label="the number of scene frames for reference",
+                                      info="For L2W reconstruction!")
+                retrieve_freq = gradio.Number(value=5, precision=0, minimum=1,
+                                              interactive=True,
+                                              visible=True,
+                                              label="retrieve frequency",
+                                              info="For L2W reconstruction!")
+                buffer_strategy = gradio.Dropdown(["reservoir", "fifo","unbounded"], 
+                                           value='reservoir', interactive=True,  
+                                           label="strategy for buffer management",
+                                           info="For L2W reconstruction!")
+                buffer_size = gradio.Number(value=100, precision=0, minimum=1,
+                                      interactive=True, 
+                                      visible=True,
+                                      label="size of the buffering set",
+                                      info="For L2W reconstruction!")
+                update_buffer_intv = gradio.Number(value=1, precision=0, minimum=1,
+                                      interactive=True, 
+                                      label="the interval of updating the buffering set",
+                                      info="For L2W reconstruction!")
+            
+            with gradio.Row():
+                run_btn = gradio.Button("Run")
+                cancel_btn = gradio.Button("Cancel", visible=True)
+
+            with gradio.Row():
+                # adjust the confidence threshold
+                conf_thres_l2w = gradio.Slider(value=12, minimum=1., maximum=100,
+                                      interactive=True, 
+                                      label="confidence threshold for the result",
+                                      )
+                # adjust the camera size in the output pointcloud
+                num_points_save = gradio.Number(value=1000000, precision=0, minimum=1,
+                                      interactive=True, 
+                                      label="number of points sampled from the result",
+                                      )
+            
+            with gradio.Row():
+                outmodel = gradio.Model3D(height=500, clear_color=(0.,0.,0.,0.3)) 
+                outviser = gradio.HTML(f'<iframe src="{viser_server_url}" width="100%" height="500px" style="border:none;"></iframe>', visible=True)
+                
+            # events
+            inputfiles.change(display_inputs,
+                                inputs=[inputfiles],
+                                outputs=[image_gallery, video_gallery])
+            input_type.change(change_inputfile_type,
+                                inputs=[input_type],
+                                outputs=[inputfiles, inputfiles_webcam, inputfiles_external_webcam_html, 
+                                         frame_extract_interval,input_url_web_cam, 
+                                         confirm_button, web_cam_account, web_cam_password, image_gallery, video_gallery])
+            kf_stride.change(change_kf_stride_type,
+                                inputs=[kf_stride],
+                                outputs=[kf_stride_fix])
+            buffer_strategy.change(change_buffer_strategy,
+                                inputs=[buffer_strategy],
+                                outputs=[buffer_size])
+            run_btn.click(fn=recon_scene_func,
+                          inputs=[tmpdir_name, frame_extract_interval,
+                                  input_type, auth_url,
+                                  inputfiles, kf_stride_fix, win_r, initial_winsize, conf_thres_i2p,
+                                  num_scene_frame, update_buffer_intv, buffer_strategy, buffer_size,
+                                  conf_thres_l2w, num_points_save, retrieve_freq],
+                          outputs=[outmodel, per_frame_res])
+            cancel_btn.click(fn=lambda: (set_cancel_flag(True), "Cancellation requested..."),
+                            outputs=[cancel_btn])
+            conf_thres_l2w.release(fn=get_model_from_scene,
+                                 inputs=[per_frame_res, tmpdir_name, num_points_save, conf_thres_l2w],
+                                 outputs=outmodel)
+            num_points_save.change(fn=get_model_from_scene,
+                            inputs=[per_frame_res, tmpdir_name, num_points_save, conf_thres_l2w],
+                            outputs=outmodel)
+            confirm_button.click(fn=change_web_camera_url,
+                                 inputs=[inputfiles_external_webcam_html, input_url_web_cam, 
+                                         web_cam_account, web_cam_password,auth_url],
+                                 outputs=[inputfiles_external_webcam_html, auth_url])
+
+    demo.launch(share=False, server_name=server_name, server_port=server_port,debug=True)
+
+def change_web_camera_url(inputs_external_webcam, web_url, web_cam_account, web_cam_password, auth_url):
+    protocol, rest_of_url = web_url.split("://")
+
+    auth_url = gradio.State(f"{protocol}://{web_cam_account}:{web_cam_password}@{rest_of_url}")
+    
+
+    inputs_external_webcam = gradio.HTML(
+                    f"""
+                    <p>Web Camera presentation:</p>
+                    <iframe src="{web_url}" width="100%" height="400px" style="border:none;"></iframe>
+                    """,
+                    visible=True,
+                )
+    return inputs_external_webcam, auth_url
+    
+    
+
+def server_gradio(args):
+
+    if args.tmp_dir is not None:
+        tmp_path = args.tmp_dir
+        os.makedirs(tmp_path, exist_ok=True)
+        tempfile.tempdir = tmp_path
+
+    if args.server_name is not None:
+        server_name = args.server_name
+    else:
+        server_name = '0.0.0.0' if args.local_network else '127.0.0.1'
+    
+    i2p_model = Image2PointsModel.from_pretrained('siyan824/slam3r_i2p')
+    l2w_model = Local2WorldModel.from_pretrained('siyan824/slam3r_l2w')
+    i2p_model.to(args.device)
+    l2w_model.to(args.device)
+    i2p_model.eval()
+    l2w_model.eval()
+
+    # slam3r will write the 3D model inside tmpdirname
+    with tempfile.TemporaryDirectory(suffix='slam3r_gradio_demo') as tmpdirname:
+        main_demo(i2p_model, l2w_model, args.device, tmpdirname, server_name, args.server_port)
+
+
+def main_online(parser:argparse.ArgumentParser):
+    args = parser.parse_args()
+    
+    displayer = threading.Thread(target=server_viser, args=(args, ))
+    displayer.start()
+    server_gradio(args)
+    
+if __name__ == "__main__":
+    main_online(argparse.ArgumentParser())
