@@ -1,0 +1,7 @@
+path: C:/Users/Hecos/Documents/sem/industry/vslam/code/object_detection/training_yolo26_boxes_with_classroom_postures
+train: images/train
+val: images/val
+test: images/test
+nc: 1
+names:
+- Human
