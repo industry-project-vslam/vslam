@@ -1,7 +1,0 @@
-path: C:/Users/Hecos/Documents/sem/industry/vslam/code/detection_model/training_yolo26_boxes
-train: images/train
-val: images/val
-test: images/test
-nc: 1
-names:
-- Human
