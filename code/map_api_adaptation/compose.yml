@@ -1,0 +1,55 @@
+services:
+  slam3r-tracker-api:
+    image: tofarim/vslam_mapper_api:20260602
+    container_name: slam3r-tracker-api
+    
+    ports:
+      - "8000:8000"
+    
+    environment:
+      - PYTHONUNBUFFERED=1
+      - HF_HUB_TIMEOUT=300
+    
+    networks:
+      - default
+    
+    restart: unless-stopped
+    
+    # Enable GPU access (requires Docker Engine with GPU support / NVIDIA Container Toolkit)
+    gpus: all
+
+    # Resource limits (adjust based on your hardware)
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+        reservations:
+          cpus: '2'
+          memory: 4G
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional: Prometheus metrics endpoint (for monitoring)
+  # prometheus:
+  #   image: prom/prometheus:latest
+  #   ports:
+  #     - "9090:9090"
+  #   volumes:
+  #     - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+  #   command:
+  #     - '--config.file=/etc/prometheus/prometheus.yml'
+
+# Named volume for persistence (optional)
+volumes:
+  slam3r_data:
+    driver: local
