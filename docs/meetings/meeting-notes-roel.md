@@ -40,3 +40,31 @@ we can detect people using yolo26n on the server, nazar improved with retraining
 lighting is a big edge case for the camera
 next detection step, don't forget about previously detected items, abandon navigational item detection
 ```
+
+interim
+
+```text
+A drone can scan anythin
+A swarm explores faster, there is a need for adaptive behaviour
+current solution, master slave, ranger + follower ai deck
+let ranger deck drone swarm around obstacles, create a map of environment with a large padding around obstacles to protect ai deck drones
+space must be unknown
+don't use deterministic models
+we have access to multiple ranger decks
+
+- explore 2 approaches
+    - drone groups consisting of ranger deck and ai decks
+    - ranger deck swarm first, ai deck swarm second
+
+first only few obstacles
+look into obstacle wall follower
+
+future research, project ai deck images on ranger deck map
+
+deliverables
+    - opportunities
+    - explored options
+    - what detection models are runnable on ai deck
+    - central ranger deck mapping
+    - extra decentralized ranger deck mapping
+```
