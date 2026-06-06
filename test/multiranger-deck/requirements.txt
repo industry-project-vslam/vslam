@@ -1,0 +1,6 @@
+cfclient
+cflib
+numpy
+vispy
+PyQt6
+pygame
