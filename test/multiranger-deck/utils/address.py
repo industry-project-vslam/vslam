@@ -13,7 +13,6 @@ def scan_drones(radio_network: int = DEFAULT_RADIO_NETWORK, radio_netmask: int =
     Returns:
         list of uris: list[str]
     """
-    cflib.crtp.init_drivers(enable_debug_driver=False)
 
     hosts = []
     max_hosts = ((~radio_netmask) & MAX_VALUE) - BROADCAST_OFFSET

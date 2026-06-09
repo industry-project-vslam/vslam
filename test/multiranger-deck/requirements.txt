@@ -4,3 +4,5 @@ numpy
 vispy
 PyQt6
 pygame
+pandas
+matplotlib
