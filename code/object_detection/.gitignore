@@ -1,0 +1,7 @@
+# Generated datasets are not stored in Git.
+data/processed/
+data/raw/
+
+# Generated notebook/runtime outputs.
+runs/inference_benchmark/
+runs/threshold_tuning/

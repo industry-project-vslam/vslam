@@ -1,54 +1,113 @@
-# Drone Vision Model
+# Object Detection And Posture Classification
 
-This repository is for a Crazyflie / Bitcraze AI-deck indoor vision project.
+This folder contains the model notebooks and runtime assets for the VSLAM
+AI-deck human detection and posture classification pipeline.
 
-Right now, the repository only keeps the raw drone images that will be used to
-build a future custom dataset. There is no finished training dataset yet.
+The pipeline is:
 
-## Current Structure
+1. Receive an AI-deck camera frame.
+2. Detect humans with a YOLO detector.
+3. Crop each detected human box.
+4. Classify the crop as a posture class.
+5. Draw boxes and posture labels on the live camera frame.
 
-```text
-|-- data/
-|   `-- raw/
-|       `-- images/
-|           `-- drone_classroom_images/
-|-- scripts/
-`-- README.md
-```
+## Current Models
 
-## Current Data
-
-Raw AI-deck drone images are stored in:
+Human detection:
 
 ```text
-data/raw/images/drone_classroom_images
+runs/human_detection/weights/best.pt
 ```
 
-These images are original source images. They are not split into train,
-validation, or test folders yet.
+Posture classification:
 
-## Project Goal
+```text
+runs/posture_classification/mobilenet_v3_small/best.pt
+runs/posture_classification/mobilenet_v3_small/class_to_idx.json
+```
 
-The goal is to create a custom object-detection dataset for low-quality
-AI-deck indoor images.
+The live drone pipeline currently uses:
 
-Planned first classes:
+- detector confidence: `0.23`
+- posture unknown confidence: `0.50`
+- posture margin rule: disabled
 
-- `person`
-- `door`
-- `window`
+## Training Data
 
-## Next Steps
+The labeled training datasets are stored in the repository so another laptop can
+train and run benchmark checks without a separate dataset transfer.
 
-1. Review the raw drone images.
-2. Label the useful images manually.
-3. Create a YOLO dataset later, after labels exist.
-4. Split the labeled dataset into train, validation, and test sets.
-5. Train a model only after the labeled dataset is ready.
+Expected human detection layout:
 
-## Notes
+```text
+data/labeled/human_detection/
+|-- data.yaml
+`-- train/
+    |-- images/
+    `-- labels/
+```
 
-- Do not train directly from `data/raw/images/drone_classroom_images`.
-- Raw images should stay unchanged.
-- Validation and test data should use real AI-deck images.
-- `scripts/` is currently empty and can be used later for project scripts.
+The current Roboflow human-detection export can be train-only. That is okay.
+`notebooks/human_detection_retraining.ipynb` reads this local export and creates
+a derived split under the ignored local folder:
+
+```text
+data/processed/human_detection_yolo26_full_boxes_split/
+```
+
+Expected posture classification layout:
+
+```text
+data/labeled/posture_classification/
+|-- train/
+|   |-- person_laying/
+|   |-- person_sitting/
+|   `-- person_standing/
+|-- val/
+`-- test/
+```
+
+If posture validation and test folders are missing, the classification notebook
+creates a local stratified split under `data/processed/`.
+
+## Notebooks
+
+Main training notebooks:
+
+```text
+notebooks/human_detection_retraining.ipynb
+notebooks/posture_classification_retraining.ipynb
+```
+
+Evaluation and utility notebooks:
+
+```text
+notebooks/tune_realtime_pipeline_thresholds.ipynb
+notebooks/benchmark_realtime_inference.ipynb
+```
+
+Use `human_detection_retraining.ipynb` for retraining the YOLO human detector.
+Use `posture_classification_retraining.ipynb` for retraining the MobileNetV3
+posture classifier.
+
+## Split Policy
+
+The committed `data/labeled/` folder is the source dataset. The notebooks create
+`data/processed/` locally for training/evaluation splits. Those processed splits
+are generated artifacts and are not committed.
+
+For development, a local train-only export is enough because the notebooks can
+build local processed splits. For model claims, threshold tuning, or comparison
+with older models, use those generated validation/test splits or a Roboflow
+export that already contains validation/test data.
+
+Commit:
+
+- notebooks and tools needed to recreate training
+- requirements files
+- `data/labeled/` source datasets
+- final selected model artifacts, if the repo should carry runnable inference
+  without a separate model download
+
+Do not commit `data/processed/`, benchmark outputs, threshold tuning outputs, or
+other generated intermediate datasets.

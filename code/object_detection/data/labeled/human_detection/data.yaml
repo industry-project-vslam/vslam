@@ -1,6 +1,7 @@
-train: ../train/images
-val: ../valid/images
-test: ../test/images
+path: .
+train: train/images
+val: train/images
+test: train/images
 
 nc: 1
 names: ['human']
