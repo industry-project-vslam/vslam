@@ -26,7 +26,7 @@ class SwarmService:
     
     def receive_meas_update(self, uri: str, meas: dict):
         self.drones[uri].position.update({"x": meas["x"], "y": meas["y"], "yaw": meas["yaw"], "z": meas["z"]})
-        self.navigation.update_obstacles(meas)
+        self.navigation.update_map(uri, meas)
 
     def take_step(self):
         drone_steps = self.navigation.step()

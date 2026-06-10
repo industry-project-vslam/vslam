@@ -8,17 +8,17 @@ MAXIMUM_RANGE = 5000
 class NavigationService:
     def __init__(self):
         self.obstacle_coordinates = pd.DataFrame(columns=["x", "y"])
+        self.drone_locations: dict[str, tuple[float, float]] = {}
+        self.drone_paths: dict[str, list[tuple[float, float]]] = {}
 
-    def update_obstacles(self, meas):
-        # angle = meas["yaw"]
-        # obstacle_x = meas["x"] + meas["front"] * math.cos(angle)
-        # obstacle_y = meas["y"] + meas["front"] * math.sin(angle)
-        # print(f"x: {obstacle_x}, y: {obstacle_y}")
-        # return
-    
+    def update_map(self, uri:str, meas: dict):    
         yaw = meas["yaw"]
         x_position = meas["x"]
         y_position = meas["y"]
+        position = (x_position, y_position)
+
+        self.drone_locations[uri] = position
+        self.drone_paths[uri].append(position)
 
         angled_ranges = [
             (meas['front'], yaw),
