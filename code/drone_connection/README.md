@@ -14,7 +14,7 @@ IP, limit FPS, save frames, and open the standard Crazyflie Client.
 ## Setup
 
 ```powershell
-cd testing\drone_connection
+cd code\drone_connection
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
@@ -109,7 +109,7 @@ Push source code and docs:
 
 ```powershell
 cd ..\..
-git add testing/drone_connection/
+git add code/drone_connection/
 git status
 git commit -m "Add real-time AI-deck posture detection"
 git push

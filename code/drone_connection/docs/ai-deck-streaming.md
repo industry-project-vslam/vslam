@@ -11,13 +11,13 @@
 
 ## Run the viewer
 
-GUI from `testing/drone_connection`:
+GUI from `code/drone_connection`:
 
 ```powershell
 python main.py
 ```
 
-Command line from `testing/drone_connection`:
+Command line from `code/drone_connection`:
 
 ```powershell
 python main.py --cli --max-fps 2
@@ -38,7 +38,7 @@ python main.py --cli --max-frames 50
 Push source code and documentation:
 
 ```powershell
-git add testing/drone_connection/
+git add code/drone_connection/
 git status
 git commit -m "Add real-time AI-deck posture detection"
 git push
