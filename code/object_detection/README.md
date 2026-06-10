@@ -1,113 +1,225 @@
 # Object Detection And Posture Classification
 
-This folder contains the model notebooks and runtime assets for the VSLAM
-AI-deck human detection and posture classification pipeline.
+This folder contains the object detection and posture classification part of
+the VSLAM AI-deck project. It includes the source datasets, training notebooks,
+selected model artifacts, and evaluation notebooks needed to reproduce the
+current human detection and posture classification workflow.
 
-The pipeline is:
+The runtime pipeline is:
 
 1. Receive an AI-deck camera frame.
-2. Detect humans with a YOLO detector.
+2. Detect every visible human with a YOLO detector.
 3. Crop each detected human box.
-4. Classify the crop as a posture class.
-5. Draw boxes and posture labels on the live camera frame.
+4. Classify each crop with a posture classifier.
+5. Draw the detection box and posture label back on the full camera image.
 
-## Current Models
+## Current Runtime Models
 
-Human detection:
+Human detection model:
 
 ```text
 runs/human_detection/weights/best.pt
 ```
 
-Posture classification:
+Posture classification model:
 
 ```text
 runs/posture_classification/mobilenet_v3_small/best.pt
 runs/posture_classification/mobilenet_v3_small/class_to_idx.json
 ```
 
-The live drone pipeline currently uses:
+The live drone pipeline currently uses these settings:
 
-- detector confidence: `0.23`
-- posture unknown confidence: `0.50`
-- posture margin rule: disabled
+```text
+detector confidence: 0.23
+posture unknown confidence: 0.50
+posture margin rule: disabled
+analyze every N frames: 2
+```
 
-## Training Data
+The posture classifier marks a crop as `unknown` when the top class probability
+is below `0.50`. There is no extra top1/top2 margin rule now because it did not
+add useful behavior on top of the confidence threshold.
 
-The labeled training datasets are stored in the repository so another laptop can
-train and run benchmark checks without a separate dataset transfer.
+## Repository Layout
 
-Expected human detection layout:
+```text
+data/
+  labeled/
+    human_detection/
+    posture_classification/
+  processed/
+notebooks/
+  human_detection_retraining.ipynb
+  posture_classification_retraining.ipynb
+  tune_realtime_pipeline_thresholds.ipynb
+  benchmark_realtime_inference.ipynb
+runs/
+  human_detection/weights/best.pt
+  posture_classification/mobilenet_v3_small/best.pt
+tools/
+requirements.txt
+```
+
+## Setup
+
+From this folder:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+For Jupyter notebooks:
+
+```powershell
+pip install notebook ipykernel
+python -m ipykernel install --user --name vslam-object-detection
+jupyter notebook
+```
+
+Use the `vslam-object-detection` kernel when running the notebooks.
+
+## Data
+
+Human detection data is stored here:
 
 ```text
 data/labeled/human_detection/
-|-- data.yaml
-`-- train/
-    |-- images/
-    `-- labels/
 ```
 
-The current Roboflow human-detection export can be train-only. That is okay.
-`notebooks/human_detection_retraining.ipynb` reads this local export and creates
-a derived split under the ignored local folder:
+Expected layout:
+
+```text
+data/labeled/human_detection/
+  data.yaml
+  train/
+    images/
+    labels/
+```
+
+The Roboflow human detection export can be train-only. The retraining notebook
+creates the local train/validation/test split under:
 
 ```text
 data/processed/human_detection_yolo26_full_boxes_split/
 ```
 
-Expected posture classification layout:
+Posture classification data is stored here:
 
 ```text
 data/labeled/posture_classification/
-|-- train/
-|   |-- person_laying/
-|   |-- person_sitting/
-|   `-- person_standing/
-|-- val/
-`-- test/
 ```
 
-If posture validation and test folders are missing, the classification notebook
-creates a local stratified split under `data/processed/`.
+Expected layout:
 
-## Notebooks
+```text
+data/labeled/posture_classification/
+  train/
+    person_laying/
+    person_sitting/
+    person_standing/
+```
 
-Main training notebooks:
+If `val/` and `test/` are not present, the classification notebook creates a
+local stratified split under `data/processed/`.
+
+## Training
+
+Train the human detector with:
 
 ```text
 notebooks/human_detection_retraining.ipynb
+```
+
+This notebook:
+
+- reads `data/labeled/human_detection/`
+- prepares YOLO box labels and local splits
+- trains from the pretrained YOLO baseline
+- evaluates the trained model
+- keeps the selected runtime model under `runs/human_detection/weights/best.pt`
+
+Train the posture classifier with:
+
+```text
 notebooks/posture_classification_retraining.ipynb
 ```
 
-Evaluation and utility notebooks:
+This notebook:
+
+- reads `data/labeled/posture_classification/`
+- creates local classification splits when needed
+- trains MobileNetV3 Small
+- evaluates per-class behavior
+- saves the selected model and class mapping under
+  `runs/posture_classification/mobilenet_v3_small/`
+
+The detection notebook automatically uses MPS when available, then CUDA when
+available, then CPU as fallback. MPS or CUDA is recommended for detector
+training. The classifier notebook is small enough to train on CPU.
+
+## Evaluation Notebooks
+
+Threshold tuning:
 
 ```text
 notebooks/tune_realtime_pipeline_thresholds.ipynb
+```
+
+Use this notebook when choosing the detector confidence for the live pipeline.
+The current approach prefers high recall while keeping precision at an
+acceptable level, instead of using an arbitrary confidence value.
+
+Inference benchmark:
+
+```text
 notebooks/benchmark_realtime_inference.ipynb
 ```
 
-Use `human_detection_retraining.ipynb` for retraining the YOLO human detector.
-Use `posture_classification_retraining.ipynb` for retraining the MobileNetV3
-posture classifier.
+Use this notebook to measure detector, classifier, and full pipeline inference
+time on another machine. It prints timing tables only and does not save charts or
+CSV output.
 
-## Split Policy
+Reference CPU benchmark result:
 
-The committed `data/labeled/` folder is the source dataset. The notebooks create
-`data/processed/` locally for training/evaluation splits. Those processed splits
-are generated artifacts and are not committed.
+```text
+detector median:      25.666 ms
+classifier median:     8.759 ms
+full pipeline median: 31.588 ms
+full pipeline p95:    48.944 ms
+```
 
-For development, a local train-only export is enough because the notebooks can
-build local processed splits. For model claims, threshold tuning, or comparison
-with older models, use those generated validation/test splits or a Roboflow
-export that already contains validation/test data.
+Based on these numbers, quantization is not needed for the current runtime
+setup. The full pipeline is already fast enough on CPU, and quantizing the
+classifier would save little because the detector is the main cost. Quantizing
+the detector could reduce accuracy, so it should only be considered if benchmark
+results on the target machine show that inference is too slow.
 
-Commit:
+## Drone Runtime
 
-- notebooks and tools needed to recreate training
-- requirements files
-- `data/labeled/` source datasets
-- final selected model artifacts, if the repo should carry runnable inference
-  without a separate model download
+The live camera integration is in the drone connection part of the repository:
 
-Do not commit `data/processed/`, benchmark outputs, threshold tuning outputs, or
-other generated intermediate datasets.
+```text
+../../testing/drone_connection/
+```
+
+That runtime loads the selected detector and classifier artifacts from this
+folder. It can show the AI-deck stream with human boxes and posture labels
+without saving frames to disk.
+
+## Current Limitations
+
+The posture classifier depends on the detector crop quality. If the detector box
+cuts off important body parts, classification quality can drop even when the
+classifier itself is correct.
+
+The `unknown` class is threshold-based, not a separately trained class. This is
+useful for low-confidence crops, but it does not replace adding more labeled
+examples for difficult postures or camera angles.
+
+The AI-deck image stream has low resolution and can be noisy. Final performance
+should be judged on live or representative AI-deck frames, not only on clean
+dataset images.
