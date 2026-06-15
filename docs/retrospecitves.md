@@ -94,6 +94,95 @@ Roel
 
 ## Week 03
 
+### Positives
+
+The interim presentation was a great success, everyone was well prepared, everyone had an equal stake and the slides looked nice as well. The addition of the ranger deck to our tools caused a split approach that will allow us to work on more possible solutions at the same time. Mapping systems now allow for the combination of footage for multiple drones.
+
+### Negatives
+
+The mapping system does not combine multiple drone pov's well due to each drone image stream scaling differently. There is a drop in motivation and presence from every team member and communication deteriorates there is a lack of daily standups
+
+### Takeaways
+
+There needs to be a shift in team dynamics
+
+### Notes
+
+```text
+Noah
++ smooth presentation, single drone mapping
+- communication between the team is lackluster, mainly because of seperate working environmnets, absence of standups
+
+Tofa
++ initial map combination for different drones testable
+- different drone footages scale differently and cannot be combined
+
+Nikita
++ start of experiments with te ranger deck drones, good splitting of the teams
+- not a lot of motivation because the project is very research heavy
+
+Anton
++ Good presentation good preparation, looking at seperate approaches
+- team memembers growing tired of research
+
+Roel
++ Great work on the presentation, looking at sperate approaches with ranger deck
+- lack of communication between the team memebers
+```
+
 ## Week 04
 
+### Positives
+
+An official splitting up of teams helps communication between sub group team members, the full team managed to get an overview of our final deliverables. Ranger deck sub groups are working on their approaches. There is progress on the person state detection AI model.
+
+### Negatives
+
+The scrum board is not maintained properly. A lot of time is already spent on map combination. The client cannot produce specific deliverables for us to achieve, they are more focussed on research which is not the goal of our project and mentally draining. There is yet again a lack of motivation and presence of team memebers.
+
+### Takeaways
+
+We need to keep the scrum board up to date. Our team will have to come up with the specific deliverables.
+
+### Notes
+
+```text
+Noah
++ 1 ranger deck 2 ai deck, daily standups
+- scrum board maintenance
+
+Tofa
++ good scope for demonstration
+- a lot of times spent on working on map combination
+
+Nikita
++ all group memebers have demonstrated results, a lot of approaches were taken and a lot of results were achieved
+- the client is very focussed on research and not deliverables wich draining
+
+Anton
++ finished the ai model and discovering problems with detection because of camera quality
+- client communication, client absence for meetings
+
+Roel
++ good splitting of teams
+- lack of motivation, presence
+```
+
 ## Week 05
+
+### Positives
+
+placeholder
+
+### Negatives
+
+placeholder
+
+### Takeaways
+
+placeholder
+
+### Notes
+
+```text
+```
