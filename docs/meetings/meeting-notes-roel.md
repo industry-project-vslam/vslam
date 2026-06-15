@@ -76,3 +76,12 @@ a virtual environment can remove a lot of limitations our drones experience
     - focus more on random exploring
     - explain pros and cons
 ```
+
+## Week 05
+
+```text
+focuss on deliverables and documentation
+we will focuss on deliverables this week unfinished reasearch (ranger deck, ai decks group / improving the person state estimation model)
+film systems (ranger deck first, ai decks second / image streaming, object detection, map making)
+also mention failed approaches
+```
