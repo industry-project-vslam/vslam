@@ -7,6 +7,42 @@
 ## Week 02
 
 ```text
+360 video 
+
+communicate position to central server
+
+only fly forward with turning
+
+minimal viable product,
+
+any object detection
+
+deliverables week 1
+
+- 
+
+deliverables, week 2
+- single non flying drone image stream to central server, existing object detection on central server
+- single flying drone image stream to central server, map making on central server
+- single non flying drone image stream to central server, position inference on central server
+- make telemetry report of flying drone from origin, moves, to origin (check kalman)
+- further experiments on P2P with 2 or 2+ drones
+- interface that shows the drone path
+
+further possiblilities
+
+- wooden pole, black and white pattern as a navigational element
+- what are hardware options for inference on the drone itself, what are the requirements (research)
+
+- p2p navigational algorithm
+- create a drone mapping interface
+
+- create a control drone visual interface
+
+
+### project board
+
+everyone takes one hour, no coding to improve their issues
 ```
 
 ## Week 03
