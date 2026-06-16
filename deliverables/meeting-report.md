@@ -71,7 +71,6 @@ Check the kickoff presentation for context
 - yolo26n retrained with labeled images taken with the ai deck camera
 - lighting can mess with the camera
 
-
 ### Todo
 
 - create a pointcloud map from the images of multiple drones
@@ -163,3 +162,4 @@ Check the kickoff presentation for context
 - state estimation model improvement
 - documentation of successfull and failed approaches
 - finalising all project management deliverables
+

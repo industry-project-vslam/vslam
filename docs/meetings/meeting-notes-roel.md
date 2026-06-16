@@ -7,6 +7,42 @@
 ## Week 02
 
 ```text
+360 video 
+
+communicate position to central server
+
+only fly forward with turning
+
+minimal viable product,
+
+any object detection
+
+deliverables week 1
+
+- 
+
+deliverables, week 2
+- single non flying drone image stream to central server, existing object detection on central server
+- single flying drone image stream to central server, map making on central server
+- single non flying drone image stream to central server, position inference on central server
+- make telemetry report of flying drone from origin, moves, to origin (check kalman)
+- further experiments on P2P with 2 or 2+ drones
+- interface that shows the drone path
+
+further possiblilities
+
+- wooden pole, black and white pattern as a navigational element
+- what are hardware options for inference on the drone itself, what are the requirements (research)
+
+- p2p navigational algorithm
+- create a drone mapping interface
+
+- create a control drone visual interface
+
+
+### project board
+
+everyone takes one hour, no coding to improve their issues
 ```
 
 ## Week 03
@@ -67,4 +103,49 @@ deliverables
     - what detection models are runnable on ai deck
     - central ranger deck mapping
     - extra decentralized ranger deck mapping
+```
+
+## Week 04
+
+```text
+last time the model recognized people
+state classification is already implemented
+using yolo26n retrained and mobilenet retrained running on the central computer
+
+mapping different frames from different cameras is still difficult but works
+in documentation all solutions have a camera that can detect depth
+we will try models where the drone position is part of the input parameters
+problem with combining drone relative position is depth estimation is not alligned
+
+drone wall following with ranger decks and mapping safe zones, objects of interest and ai decks afterward
+
+human operated swarm, setting waypoints for the drone
+
+trying master slave drone communication
+central compute system is requireed because of lack of computation
+1 in front, 2 in the back
+
+master slave relation is difficult because of undetected objects that the following ai decks can follow
+
+relative positioning using flow deck only is not used
+using two radio receives you can get positioning using the angle of reception
+
+all teams struggled with position estimation, limitted compution, difficulty of firmware programming
+
+a virtual environment can remove a lot of limitations our drones experience
+
+- visual demonstration of the master slave approach
+- integrate, ranger deck - ai deck approach, object detection of multiple drones, send image data to pointcloud server
+    - annotationg region of interest with ai deck detection seems a bit difficult
+    - focus more on random exploring
+    - explain pros and cons
+```
+
+## Week 05
+
+```text
+focuss on deliverables and documentation
+we will focuss on deliverables this week unfinished reasearch (ranger deck, ai decks group / improving the person state estimation model)
+film systems (ranger deck first, ai decks second / image streaming, object detection, map making)
+also mention failed approaches
 ```
