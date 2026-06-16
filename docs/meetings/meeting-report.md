@@ -55,7 +55,7 @@ Check the kickoff presentation for context
 - use a wooden pole, black and white pattern as a navigational element
 - research what are hardware options for inference on the drone itself
 
-## week 02
+## Week 02
 
 ### Progress
 
@@ -96,3 +96,70 @@ Check the kickoff presentation for context
 ### Extra
 
 - we now have the ranger deck available
+
+## Week 03
+
+### Progress
+
+- mapping works perfectly for a single drone with an api image upload
+- image processing for map making takes 30 seconds per image
+- each drone is granted a static ip for a router network
+- using set positions drones can communicate P2P for collision avoidance
+- the drones can handle a sloped surface, the ranger deck does not get confused, the texture of the floor is the most important factor 
+- testing of the error accumulation of the ranger deck resulted in an average of 10cm after a 1m² square flight sequence, but the takeoff and landing introduce even more error
+- drones flying within 0.5m of eachother is dangerous for the drones due to error accumulation in the IMU
+- using drone net to detect obstacles, this is not viable
+- using the drone image stream we can use yolo26n for object detection
+- discovered lighting has a big influence on the camera's performance
+
+### Todo
+
+- figuring out a way to stitch together maps to create a common map (multiple drones produce multiple maps that need to be merged)
+- speed up image processing for map making
+- infering position from drone image maps and a drone image
+- getting started with the multi ranger deck for room mapping
+- P2P collision avoidance with 3 drones
+- creating a test environment for collision avoidance
+- use depth models on the drone itself, try pulp tiny v3
+
+### Client Feedback
+
+- focus on documentation, track progress with incremental steps
+- try to detect drones and know which drone is being detected, know your nearest neighbour
+- use homeing beacons, an object to recognizere (this is redundant because of mapping)
+- determine what would be needed for onboard object detection models
+- look into the whole application architecture: pre run necessities, communicating systems, delays during runs
+- remember previously detected items
+
+## Week 04
+
+### Progress
+
+- state claasification implemented but performs badly due to drone image quality (it is a retrained mobilenet model)
+- mapping different frames from different cameras is still difficult but works, in documentation all solutions have a camera that can detect depth, problem with combining drone relative position is depth estimation is not alligned
+- ranger deck first, ai decks second approach can perform wall following with ranger decks and mapping safe zones, objects of interest and ai decks fly afterward
+- ranger deck, ai decks grouped approach is difficult because of undetected objects that the following ai decks can crash into and needs more testing and a central compute system because of the limitted compute on the drone (192 kilo bytes)
+- all drone research is stumped because of position estimation problems, limitted on board computation and the inexperience of firmware programming and lack of knowledge in navigational algorithms, a simulated testing environment could remove a lot of these drawbacks
+
+### Todo
+
+- we will try models where the drone position is part of the input parameters
+- improving ranger deck first, ai decks second approach
+- improving ranger deck, ai decks grouped approach
+- finalise deliverables
+    - visual demonstration of the ranger deck, ai decks grouped approach
+    - integrate ranger deck first, ai decks second approach with image streaming and processing (object detection and pointcloud)
+
+### Client feedback
+
+- look into a human operated swarm, setting waypoints for drones to go to
+- try using two radio's (this is mathematically impossible you need three)
+
+## Week 05
+
+### Todo
+
+- demo filming
+- state estimation model improvement
+- documentation of successfull and failed approaches
+- finalising all project management deliverables
