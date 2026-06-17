@@ -1,0 +1,4 @@
+cflib
+numpy
+vispy
+PyQt6
