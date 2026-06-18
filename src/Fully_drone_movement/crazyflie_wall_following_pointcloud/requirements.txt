@@ -2,3 +2,4 @@ cflib
 numpy
 vispy
 PyQt6
+matplotlib
