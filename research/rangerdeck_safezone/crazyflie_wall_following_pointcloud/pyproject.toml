@@ -1,0 +1,11 @@
+[project]
+name = "crazyflie-wall-following-pointcloud"
+version = "0.1.0"
+description = "Merged Bitcraze Crazyflie Multi-ranger wall-following and point-cloud demo"
+requires-python = ">=3.10"
+dependencies = [
+    "cflib",
+    "numpy",
+    "vispy",
+    "PyQt6",
+]

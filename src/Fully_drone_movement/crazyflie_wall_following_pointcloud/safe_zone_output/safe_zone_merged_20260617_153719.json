@@ -1,0 +1,107 @@
+{
+  "description": "Merged safe-zone map from V8 meeting-guard two simultaneous Multiranger drones controlled by one Crazyradio.",
+  "created_at": "20260617_153719",
+  "mapper_setup": {
+    "mapper1_uri": "radio://0/80/2M/E7E7E7E701",
+    "mapper2_uri": "radio://0/80/2M/E7E7E7E703",
+    "mapper1_height": 0.2,
+    "mapper2_height": 0.32,
+    "log_period_ms": 250,
+    "ai_split_center_xy": [
+      -0.23343345694482842,
+      -0.7576493856611851
+    ],
+    "half_stop_enabled": false,
+    "half_stop_yaw_deg": 320.0,
+    "export_merged_obstacles": true,
+    "center_start_setup": {
+      "start_separation_m": 0.3,
+      "mapper1_start_offset_x": 0.15,
+      "mapper2_start_offset_x": -0.15,
+      "mapper1_wall_side": "left",
+      "mapper2_wall_side": "right",
+      "back_sensor_ignore_seconds": 5.0,
+      "finish_target_radius": 0.45,
+      "meeting_guard_enabled": true,
+      "meeting_guard_distance_m": 1.0,
+      "meeting_guard_min_time_s": 24.0,
+      "meeting_guard_min_path_m": 2.2,
+      "meeting_guard_min_yaw_deg": 180.0
+    },
+    "mapper2_transform_into_mapper1_frame": {
+      "mode": "fixed_center_start",
+      "estimated_offset_x": -0.15,
+      "estimated_offset_y": 0.0,
+      "yaw_deg": 180.0
+    }
+  },
+  "room_boundary_polygon": [
+    [
+      -2.1341967222852913,
+      -2.0759588672423983
+    ],
+    [
+      1.6673298083956345,
+      -2.0759588672423983
+    ],
+    [
+      1.6673298083956345,
+      0.560660095920028
+    ],
+    [
+      -2.1341967222852913,
+      0.560660095920028
+    ]
+  ],
+  "safe_zone_polygon": [
+    [
+      -1.7841967222852912,
+      -1.7259588672423982
+    ],
+    [
+      1.3173298083956344,
+      -1.7259588672423982
+    ],
+    [
+      1.3173298083956344,
+      0.210660095920028
+    ],
+    [
+      -1.7841967222852912,
+      0.210660095920028
+    ]
+  ],
+  "obstacle_keepouts": [
+    {
+      "id": 1,
+      "center": [
+        0.3648733674157887,
+        -0.45274191393148927
+      ],
+      "radius": 0.55,
+      "points": 60
+    },
+    {
+      "id": 2,
+      "center": [
+        -1.243822480815388,
+        -0.35903445212140217
+      ],
+      "radius": 0.55,
+      "points": 41
+    }
+  ],
+  "start_position_xy": [
+    -0.23343345694482842,
+    -0.7576493856611851
+  ],
+  "source_files": {
+    "merged_csv": "safe_zone_output/merged_filtered_pointcloud_20260617_153719.csv",
+    "safe_zone_png": "safe_zone_output/safe_zone_merged_20260617_153719.png"
+  },
+  "rules_for_other_drones": {
+    "stay_inside_safe_zone_polygon": true,
+    "stay_outside_obstacle_keepouts": true,
+    "note": "start_position_xy is the center of the merged safe-zone. Place AI1 30 cm in front of this center and AI2 30 cm behind this center."
+  }
+}

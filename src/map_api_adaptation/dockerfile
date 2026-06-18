@@ -1,0 +1,56 @@
+### Builder stage: compile local CUDA extensions
+FROM nvidia/cuda:12.1.1-devel-ubuntu22.04 AS builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+WORKDIR /app
+
+# System deps for building (minimal)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3-dev build-essential cmake && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy source for compilation
+COPY slam3r/ ./slam3r/
+
+# Compile optional RoPE CUDA kernels in-place (produces .so files)
+RUN if [ -f slam3r/pos_embed/curope/setup.py ]; then \
+      cd slam3r/pos_embed/curope && python3 setup.py build_ext --inplace || true; \
+    fi
+
+### Runtime stage: smaller image with only runtime artifacts
+FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
+
+WORKDIR /app
+
+# Install minimal runtime deps (Added curl and X11 libs for Open3D)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3-pip curl \
+    libx11-6 libxext6 libxrender1 libxrandr2 libxinerama1 && \
+    rm -rf /var/lib/apt/lists/*
+RUN python3 -m pip install --upgrade pip --no-cache-dir
+
+# Install PyTorch with CUDA 12.1 early (heavy layer, rarely changes)
+RUN python3 -m pip install --no-cache-dir \
+    --index-url https://download.pytorch.org/whl/cu121 \
+    "torch==2.5.0" "torchvision==0.20.0" "torchaudio==2.5.0"
+
+# Copy requirements and install dependencies (before application code for better caching)
+COPY requirements.txt ./
+RUN python3 -m pip install --no-cache-dir -r requirements.txt
+
+# Copy compiled RoPE extension artifacts from builder (compiled extensions)
+COPY --from=builder /app/slam3r/pos_embed/curope/ /app/slam3r/pos_embed/curope/
+
+# Copy pre-downloaded HuggingFace models cache (included in image)
+COPY .hf_cache/hub/ /root/.cache/huggingface/hub/
+
+# Copy application code last (changes frequently, shouldn't invalidate pip layers)
+COPY slam3r/ ./slam3r/
+COPY api/ ./api/
+
+# Expose port 
+EXPOSE 8000
+
+# Entrypoint for FastAPI server
+ENTRYPOINT ["python3", "-m", "uvicorn"]
+CMD ["api.main:app", "--host", "0.0.0.0", "--port", "8000"]

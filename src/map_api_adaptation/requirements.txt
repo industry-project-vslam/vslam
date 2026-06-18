@@ -1,0 +1,35 @@
+# Lightweight requirements for API-only deployment
+# Note: PyTorch is installed separately via CUDA wheels in Dockerfile
+
+# API / web
+fastapi
+uvicorn[standard]
+pydantic
+python-multipart
+
+# Core
+numpy
+scipy
+requests
+
+# Computer vision / imaging
+opencv-python-headless
+scikit-image
+Pillow
+imageio
+pillow-heif
+
+# Required by slam3r modules
+matplotlib
+einops
+huggingface-hub
+tqdm
+safetensors
+
+# Performance optimizations
+xformers
+
+# 3D support (used by pipeline)
+trimesh #==3.22.0
+open3d
+

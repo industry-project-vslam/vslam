@@ -1,0 +1,64 @@
+{
+  "description": "2D safe-zone map generated from Crazyflie wall/obstacle scan",
+  "units": "meters",
+  "filtered_pointcloud_csv": "safe_zone_output\\filtered_pointcloud_20260611_094801.csv",
+  "raw_point_count": 2870,
+  "filtered_point_count": 2820,
+  "room_boundary_polygon": [
+    [
+      -1.9085635137549775,
+      -2.051619573009134
+    ],
+    [
+      2.3811054044289515,
+      -2.051619573009134
+    ],
+    [
+      2.3811054044289515,
+      0.7001070516305675
+    ],
+    [
+      -1.9085635137549775,
+      0.7001070516305675
+    ]
+  ],
+  "safe_zone_polygon": [
+    [
+      -1.5585635137549776,
+      -1.701619573009134
+    ],
+    [
+      2.0311054044289514,
+      -1.701619573009134
+    ],
+    [
+      2.0311054044289514,
+      0.35010705163056755
+    ],
+    [
+      -1.5585635137549776,
+      0.35010705163056755
+    ]
+  ],
+  "obstacle_keepouts": [
+    {
+      "id": 1,
+      "center": [
+        -0.4319775610506751,
+        -1.4482695751443395
+      ],
+      "radius": 0.55
+    }
+  ],
+  "start_position_xy": [
+    0.06639731675386429,
+    0.04059246927499771
+  ],
+  "safe_zone_png": "safe_zone_output\\safe_zone_20260611_094801.png",
+  "rules_for_other_drones": {
+    "allowed": "inside safe_zone_polygon",
+    "not_allowed": "outside safe_zone_polygon or inside any obstacle_keepout circle",
+    "wall_margin_m": 0.35,
+    "obstacle_margin_m": 0.55
+  }
+}
