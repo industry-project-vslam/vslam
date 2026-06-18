@@ -172,17 +172,36 @@ Roel
 
 ### Positives
 
-placeholder
+Most team members are very happy with the end result and also very happy that it's the end of the project this week. We have two demo's that feel complete and can demonstrate our work while also having extensive documentation. Team members can still converse about the project in a friendly and professional matter. We did not take up any new additions from the client and managed to define our own deliverables.
 
 ### Negatives
 
-placeholder
-
-### Takeaways
-
-placeholder
+Some team members feel the end result to be underwhelming. Others were tired and demotivated this week. There's also team members that are displeased as some team members have not committed fully to this project and showed a lack of dedication.
 
 ### Notes
 
 ```text
+Noah
++ Happy with his part of the end result, happy with a complete demo
+- Some team memebers not committing fully to the project in this last week
+
+Nikita
++ Very happy to be near the end result and near the end, happy with the amount work
+- Less communication between group members 
+
+Tofa
++ We finally have an end result, not taking in new changes from the client, maintaining a backlog, we have concrete deliverables, complete documentation
+- Feels like we gave up on the project, feels underwhelming
+
+Anton
++ Finishing the project and there is a deliverable result, there was enough time to do all we planned to do
+- The least amount of motivation/tiredness
+
+Nazar
++ Even though we are tired there are still good vibes and everyone can still be friendly
+- We became less motivated because it's the finishing weeks
+
+Roel
++ All the parts that needed to be integrated together are put together
+- Complete lack of prefessionalism and dedication from some team members which could have improved our end result
 ```
