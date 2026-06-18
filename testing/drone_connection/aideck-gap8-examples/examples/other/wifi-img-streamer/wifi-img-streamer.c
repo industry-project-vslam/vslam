@@ -38,13 +38,20 @@
 #define CAM_WIDTH 324
 #define CAM_HEIGHT 244
 #ifndef STREAM_FRAME_PERIOD_MS
-#define STREAM_FRAME_PERIOD_MS 100
+#define STREAM_FRAME_PERIOD_MS 125
 #endif
-#ifndef STREAM_SCALE_DIV
-#define STREAM_SCALE_DIV 2
+#ifdef SETUP_WIFI_AP
+#error "SETUP_WIFI_AP is disabled for this project. Station Wi-Fi credentials are configured by the Crazyflie firmware."
 #endif
-#define STREAM_WIDTH (CAM_WIDTH / STREAM_SCALE_DIV)
-#define STREAM_HEIGHT (CAM_HEIGHT / STREAM_SCALE_DIV)
+#ifndef STREAM_EVERY_N_FRAMES
+#define STREAM_EVERY_N_FRAMES 2
+#endif
+#ifndef STREAM_WIDTH
+#define STREAM_WIDTH 200
+#endif
+#ifndef STREAM_HEIGHT
+#define STREAM_HEIGHT 200
+#endif
 
 static pi_task_t task1;
 static unsigned char *imgBuff;
@@ -169,18 +176,18 @@ void createImageHeaderPacket(CPXPacket_t * packet, uint32_t imgSize, StreamerMod
 }
 
 static void prepareStreamFrame(uint8_t *src, uint8_t *dst) {
-#if STREAM_SCALE_DIV == 1
-  (void)src;
-  (void)dst;
-#else
+  const uint32_t cropSize = CAM_HEIGHT;
+  const uint32_t cropX = (CAM_WIDTH - cropSize) / 2;
+
   for (uint32_t y = 0; y < STREAM_HEIGHT; y++) {
-    uint8_t *srcRow = &src[(y * STREAM_SCALE_DIV) * CAM_WIDTH];
+    uint32_t srcY = (y * cropSize) / STREAM_HEIGHT;
+    uint8_t *srcRow = &src[srcY * CAM_WIDTH + cropX];
     uint8_t *dstRow = &dst[y * STREAM_WIDTH];
     for (uint32_t x = 0; x < STREAM_WIDTH; x++) {
-      dstRow[x] = srcRow[x * STREAM_SCALE_DIV];
+      uint32_t srcX = (x * cropSize) / STREAM_WIDTH;
+      dstRow[x] = srcRow[srcX];
     }
   }
-#endif
 }
 
 void sendBufferViaCPX(CPXPacket_t * packet, uint8_t * buffer, uint32_t bufferSize) {
@@ -236,11 +243,7 @@ void camera_task(void *parameters)
   uint32_t streamResolution = STREAM_WIDTH * STREAM_HEIGHT;
   uint32_t streamSize = streamResolution * sizeof(unsigned char);
   imgBuff = (unsigned char *)pmsis_l2_malloc(captureSize);
-#if STREAM_SCALE_DIV == 1
-  streamBuff = imgBuff;
-#else
   streamBuff = (unsigned char *)pmsis_l2_malloc(streamSize);
-#endif
   if (imgBuff == NULL)
   {
     cpxPrintToConsole(LOG_TO_CRTP, "Failed to allocate Memory for Image \n");
@@ -302,6 +305,7 @@ void camera_task(void *parameters)
   {
     if (wifiClientConnected == 1)
     {
+      bool shouldStreamFrame = (frameCounter % STREAM_EVERY_N_FRAMES) == 0;
       TickType_t frameStart = xTaskGetTickCount();
       start = xTaskGetTickCount();
       pi_camera_capture_async(&camera, imgBuff, resolution, pi_task_callback(&task1, capture_done_cb, NULL));
@@ -310,58 +314,67 @@ void camera_task(void *parameters)
       pi_camera_control(&camera, PI_CAMERA_CMD_STOP, 0);
       captureTime = xTaskGetTickCount() - start;
 
-      prepareStreamFrame(imgBuff, streamBuff);
-
-      if (streamerMode == JPEG_ENCODING)
+      if (shouldStreamFrame)
       {
-        //jpeg_encoder_process_async(&jpeg_encoder, &buffer, &jpeg_data, pi_task_callback(&task1, encoding_done_cb, NULL));
-        //xEventGroupWaitBits(evGroup, JPEG_ENCODING_DONE_BIT, pdTRUE, pdFALSE, (TickType_t)portMAX_DELAY);
-        //jpeg_encoder_process_status(&jpegSize, NULL);
-        start = xTaskGetTickCount();
-        jpeg_encoder_process(&jpeg_encoder, &buffer, &jpeg_data, &jpegSize);
-        encodingTime = xTaskGetTickCount() - start;
+        prepareStreamFrame(imgBuff, streamBuff);
 
-        imgSize = headerSize + jpegSize + footerSize;
+        if (streamerMode == JPEG_ENCODING)
+        {
+          //jpeg_encoder_process_async(&jpeg_encoder, &buffer, &jpeg_data, pi_task_callback(&task1, encoding_done_cb, NULL));
+          //xEventGroupWaitBits(evGroup, JPEG_ENCODING_DONE_BIT, pdTRUE, pdFALSE, (TickType_t)portMAX_DELAY);
+          //jpeg_encoder_process_status(&jpegSize, NULL);
+          start = xTaskGetTickCount();
+          jpeg_encoder_process(&jpeg_encoder, &buffer, &jpeg_data, &jpegSize);
+          encodingTime = xTaskGetTickCount() - start;
 
-        // First send information about the image
-        createImageHeaderPacket(&txp, imgSize, JPEG_ENCODING);
-        cpxSendPacketBlocking(&txp);
+          imgSize = headerSize + jpegSize + footerSize;
 
-        start = xTaskGetTickCount();
-        // First send header
-        memcpy(txp.data, header.data, headerSize);
-        txp.dataLength = headerSize;
-        cpxSendPacketBlocking(&txp);
+          // First send information about the image
+          createImageHeaderPacket(&txp, imgSize, JPEG_ENCODING);
+          cpxSendPacketBlocking(&txp);
 
-        // Send image data
-        sendBufferViaCPX(&txp, (uint8_t*) jpeg_data.data, jpegSize);
+          start = xTaskGetTickCount();
+          // First send header
+          memcpy(txp.data, header.data, headerSize);
+          txp.dataLength = headerSize;
+          cpxSendPacketBlocking(&txp);
 
-        // Send footer
-        memcpy(txp.data, footer.data, footerSize);
-        txp.dataLength = footerSize;
-        cpxSendPacketBlocking(&txp);
+          // Send image data
+          sendBufferViaCPX(&txp, (uint8_t*) jpeg_data.data, jpegSize);
 
-        transferTime = xTaskGetTickCount() - start;
+          // Send footer
+          memcpy(txp.data, footer.data, footerSize);
+          txp.dataLength = footerSize;
+          cpxSendPacketBlocking(&txp);
+
+          transferTime = xTaskGetTickCount() - start;
+        }
+        else
+        {
+          imgSize = streamSize;
+          start = xTaskGetTickCount();
+
+          // First send information about the image
+          createImageHeaderPacket(&txp, imgSize, RAW_ENCODING);
+          cpxSendPacketBlocking(&txp);
+
+          start = xTaskGetTickCount();
+          // Send image
+          sendBufferViaCPX(&txp, streamBuff, imgSize);
+
+          transferTime = xTaskGetTickCount() - start;
+        }
       }
       else
       {
-        imgSize = streamSize;
-        start = xTaskGetTickCount();
-
-        // First send information about the image
-        createImageHeaderPacket(&txp, imgSize, RAW_ENCODING);
-        cpxSendPacketBlocking(&txp);
-
-        start = xTaskGetTickCount();
-        // Send image
-        sendBufferViaCPX(&txp, streamBuff, imgSize);
-
-        transferTime = xTaskGetTickCount() - start;
+        encodingTime = 0;
+        transferTime = 0;
+        imgSize = 0;
       }
       frameCounter++;
 #ifdef OUTPUT_PROFILING_DATA
-      cpxPrintToConsole(LOG_TO_CRTP, "frame=%d, capture=%dms, encoding=%d ms (%d bytes), transfer=%d ms\n",
-                        frameCounter, captureTime, encodingTime, imgSize, transferTime);
+      cpxPrintToConsole(LOG_TO_CRTP, "frame=%d, streamed=%d, capture=%dms, encoding=%d ms (%d bytes), transfer=%d ms\n",
+                        frameCounter, shouldStreamFrame, captureTime, encodingTime, imgSize, transferTime);
 #endif
       TickType_t frameTime = xTaskGetTickCount() - frameStart;
       TickType_t targetFrameTicks = pdMS_TO_TICKS(STREAM_FRAME_PERIOD_MS);

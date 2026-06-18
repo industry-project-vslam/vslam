@@ -2,7 +2,7 @@ io=uart
 PMSIS_OS = freertos
 
 ifeq ($(SETUP_WIFI_AP), 1)
-APP_CFLAGS += -DSETUP_WIFI_AP
+$(error SETUP_WIFI_AP is disabled for this project. Configure station Wi-Fi in Crazyflie firmware bq_config instead.)
 endif
 
 APP = wifi-img-streamer
