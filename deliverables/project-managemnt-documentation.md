@@ -1,4 +1,16 @@
-# Project Management Documentation
+# PROJECT MANAGEMENT DOCUMENTATION
+
+# Burndown chart
+
+![burndown chart](images/burndown-chart.png)
+
+# Sprint backlogs
+
+## Interim
+![interim backlog](images/project-board-interim.png)
+
+## Project End
+![end backlog](images/project-board-end.png)
 
 # Retrospective
 
