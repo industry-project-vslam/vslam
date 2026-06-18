@@ -14,11 +14,12 @@ import numpy as np
 
 
 FrameCallback = Callable[[int, float, str], None]
+ImageCallback = Callable[[np.ndarray, int, float, str], np.ndarray | None]
 
 
 @dataclass
 class StreamSettings:
-    host: str = "192.168.4.1"
+    host: str = "172.20.10.7"
     port: int = 5000
     max_fps: float = 0.0
     timeout: float = 5.0
@@ -28,6 +29,8 @@ class StreamSettings:
     max_frames: int = 0
     debug: bool = False
     display_scale: int = 2
+    window_name: str = "AI-deck stream"
+    show_window: bool = True
 
 
 class AIDeckStreamClient:
@@ -40,12 +43,14 @@ class AIDeckStreamClient:
         if self._socket is not None:
             self._socket.close()
             self._socket = None
-        cv2.destroyAllWindows()
+        if self.settings.show_window:
+            cv2.destroyAllWindows()
 
     def run(
         self,
         stop_event: Event | None = None,
         on_frame: FrameCallback | None = None,
+        on_image: ImageCallback | None = None,
     ) -> int:
         stop_event = stop_event or Event()
         frame_count = 0
@@ -78,17 +83,18 @@ class AIDeckStreamClient:
                 average_fps = frame_count / max(now - stream_started, 0.001)
 
                 if image_format == 0:
-                    self._show_raw(image_data, width, height, frame_count)
+                    self._show_raw(image_data, width, height, frame_count, average_fps, on_image)
                     frame_type = "raw"
                 else:
-                    self._show_jpeg(image_data, frame_count)
+                    self._show_jpeg(image_data, frame_count, average_fps, on_image)
                     frame_type = "jpeg"
 
                 if on_frame is not None:
                     on_frame(frame_count, average_fps, frame_type)
 
-                if cv2.waitKey(1) & 0xFF == ord("q"):
-                    break
+                if self.settings.show_window:
+                    if cv2.waitKey(1) & 0xFF == ord("q"):
+                        break
 
                 if self.settings.max_frames and frame_count >= self.settings.max_frames:
                     break
@@ -150,17 +156,31 @@ class AIDeckStreamClient:
             self._debug(f"image payload complete: bytes={len(image_data)} packets={packet_count}")
         return bytes(image_data)
 
-    def _show_raw(self, image_data: bytes, width: int, height: int, frame_count: int) -> None:
+    def _show_raw(
+        self,
+        image_data: bytes,
+        width: int,
+        height: int,
+        frame_count: int,
+        average_fps: float,
+        on_image: ImageCallback | None,
+    ) -> None:
         raw_image = np.frombuffer(image_data, dtype=np.uint8)
         raw_image.shape = (height, width)
         color_image = cv2.cvtColor(raw_image, cv2.COLOR_BayerBG2BGRA)
-        raw_preview = self._scale_for_display(raw_image)
-        color_preview = self._scale_for_display(color_image)
+        display_image = color_image
+        if on_image is not None:
+            callback_image = on_image(color_image, frame_count, average_fps, "raw")
+            display_image = callback_image if callback_image is not None else color_image
 
-        if self.settings.raw_view in ["raw", "both"]:
-            cv2.imshow("AI-deck raw", raw_preview)
-        if self.settings.raw_view in ["color", "both"]:
-            cv2.imshow("AI-deck stream", color_preview)
+        raw_preview = self._scale_for_display(raw_image)
+        color_preview = self._scale_for_display(display_image)
+
+        if self.settings.show_window:
+            if self.settings.raw_view in ["raw", "both"]:
+                cv2.imshow(f"{self.settings.window_name} raw", raw_preview)
+            if self.settings.raw_view in ["color", "both"]:
+                cv2.imshow(self.settings.window_name, color_preview)
 
         if self.settings.save_frames:
             raw_dir = self.settings.output_dir / "raw"
@@ -170,13 +190,25 @@ class AIDeckStreamClient:
             cv2.imwrite(str(raw_dir / f"img_{frame_count:06d}.png"), raw_image)
             cv2.imwrite(str(color_dir / f"img_{frame_count:06d}.png"), color_image)
 
-    def _show_jpeg(self, image_data: bytes, frame_count: int) -> None:
+    def _show_jpeg(
+        self,
+        image_data: bytes,
+        frame_count: int,
+        average_fps: float,
+        on_image: ImageCallback | None,
+    ) -> None:
         encoded = np.frombuffer(image_data, np.uint8)
         decoded = cv2.imdecode(encoded, cv2.IMREAD_UNCHANGED)
         if decoded is None:
             raise ValueError("Received invalid JPEG frame")
 
-        cv2.imshow("AI-deck stream", self._scale_for_display(decoded))
+        display_image = decoded
+        if on_image is not None:
+            callback_image = on_image(decoded, frame_count, average_fps, "jpeg")
+            display_image = callback_image if callback_image is not None else decoded
+
+        if self.settings.show_window:
+            cv2.imshow(self.settings.window_name, self._scale_for_display(display_image))
 
         if self.settings.save_frames:
             jpeg_dir = self.settings.output_dir / "jpeg"

@@ -30,7 +30,7 @@ class AIDeckApp(ttk.Frame):
     def __init__(
         self,
         master: tk.Tk,
-        host: str = "192.168.4.1",
+        host: str = "172.20.10.7",
         port: int = 5000,
         max_fps: float = 0.0,
         timeout: float = 30.0,
@@ -227,7 +227,7 @@ class AIDeckApp(ttk.Frame):
 
 
 def launch_gui(
-    host: str = "192.168.4.1",
+    host: str = "172.20.10.7",
     port: int = 5000,
     max_fps: float = 0.0,
     timeout: float = 30.0,
