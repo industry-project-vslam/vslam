@@ -1,0 +1,14 @@
+path: .
+train: train/images
+val: train/images
+test: train/images
+
+nc: 1
+names: ['human']
+
+roboflow:
+  workspace: howest-4moj0
+  project: humandetection-snieo
+  version: 1
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/howest-4moj0/humandetection-snieo/dataset/1
