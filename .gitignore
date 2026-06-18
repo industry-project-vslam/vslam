@@ -831,6 +831,9 @@ pip-selfcheck.json
 
 # End of https://www.toptal.com/developers/gitignore/api/visualstudio,csharp,python,unity,venv
 
+### - EXTRA - ###
+
+*cache/
 ### AI-deck / local capture outputs ###
 .venv/
 stream_out/
