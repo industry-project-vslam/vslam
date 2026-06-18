@@ -139,6 +139,8 @@ With all drones are placed correctly, turn them on.
 python main_v10_corners.py # run the 2D mapping mission
 ```
 
+press ENTER for the mission to start
+
 The mission will run in this order.
 
 First, M1 and M2 connect. Then M1 and M2 take off and map the room. After the mapping is finished, a merged safe-zone map is created. If an obstacle is detected, it is exported to the safe-zone file.
