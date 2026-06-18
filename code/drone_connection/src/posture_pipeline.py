@@ -202,30 +202,34 @@ class PosturePipeline:
     def _draw_annotations(self, frame: np.ndarray, annotations: list[Annotation]) -> None:
         for ann in annotations:
             color = (0, 165, 255) if ann.unknown else (0, 200, 0)
-            cv2.rectangle(frame, (ann.x1, ann.y1), (ann.x2, ann.y2), color, 2)
+            cv2.rectangle(frame, (ann.x1, ann.y1), (ann.x2, ann.y2), color, 1)
 
             label = f"{ann.label} {ann.posture_confidence:.2f}"
-            cv2.putText(frame, f"det {ann.detector_confidence:.2f}", (ann.x1, ann.y2 + 16), cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1)
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 0.34
+            text_thickness = 1
+            padding = 2
 
-            (text_width, text_height), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 2)
-            y_text = max(ann.y1, text_height + baseline + 4)
-            cv2.rectangle(
-                frame,
-                (ann.x1, y_text - text_height - baseline - 4),
-                (ann.x1 + text_width + 8, y_text + baseline),
-                color,
-                -1,
-            )
+            (text_width, text_height), baseline = cv2.getTextSize(label, font, font_scale, text_thickness)
+            y_text = max(ann.y1, text_height + baseline + padding)
+            x_text = ann.x1
+            bg_top = max(0, y_text - text_height - baseline - padding)
+            bg_right = min(frame.shape[1] - 1, x_text + text_width + padding * 2)
+            cv2.rectangle(frame, (x_text, bg_top), (bg_right, y_text + baseline), color, -1)
             cv2.putText(
                 frame,
                 label,
-                (ann.x1 + 4, y_text - 4),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.55,
+                (x_text + padding, y_text - padding),
+                font,
+                font_scale,
                 (0, 0, 0),
-                2,
+                text_thickness,
                 cv2.LINE_AA,
             )
+
+            detector_label = f"d {ann.detector_confidence:.2f}"
+            detector_y = min(frame.shape[0] - 2, ann.y2 + 10)
+            cv2.putText(frame, detector_label, (ann.x1, detector_y), font, 0.3, color, 1, cv2.LINE_AA)
 
     @staticmethod
     def _ensure_bgr(frame: np.ndarray) -> np.ndarray:

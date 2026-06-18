@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+stream_out/
+*.ipynb_checkpoints/
