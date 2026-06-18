@@ -14,7 +14,7 @@ DRONE_PORT = 5000
 
 API_URL = "http://0.0.0.0:8000"
 
-DRONE_ID = "test"
+DRONE_ID = "demo_drone"
 
 SCALE = 2.0
 CONF = 0.25
