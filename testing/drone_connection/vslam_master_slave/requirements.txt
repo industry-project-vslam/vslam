@@ -1,0 +1,6 @@
+numpy
+opencv-python
+cflib
+cfclient
+h5py
+PyQt6
